@@ -12,11 +12,11 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade pip setupto
 COPY requirements*.txt .
 RUN --mount=type=cache,target=/root/.cache/pip pip install --upgrade -r requirements_dev.txt
 
-# Set up dbt-related dependencies.
-RUN --mount=type=cache,target=/root/.cache/pip pip install dbt-postgres
+# Set up dataform-related dependencies.
+# RUN --mount=type=cache,target=/root/.cache/pip pip install dataform-postgres
 
 # Copy everything. (Note: If needed, we can use .dockerignore to limit what's copied.)
 COPY . .
 
 # Install sqlfluff and the dbt templater in editable mode.
-RUN pip install -e . -e plugins/sqlfluff-templater-dbt
+RUN pip install -e . -e plugins/sqlfluff-templater-dataform

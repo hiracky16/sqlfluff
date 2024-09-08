@@ -1,4 +1,7 @@
+config {
+    type: "talbe"
+}
 
-with dbt__CTE__INTERNAL_test as (
-select * from a
-)select count(*) from dbt__CTE__INTERNAL_test
+-- The rest of a SQLX file contains your SELECT statement used to create the table.
+
+SELECT * from `test.test`

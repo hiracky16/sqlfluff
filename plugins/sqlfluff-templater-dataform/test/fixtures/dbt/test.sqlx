@@ -1,0 +1,8 @@
+
+
+
+
+-- The rest of a SQLX file contains your
+-- SELECT statement used to create the table.
+
+SELECT 1 AS value FROM `project_id.dataform.test`

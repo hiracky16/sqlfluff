@@ -1,7 +1,7 @@
 [project]
-name = "sqlfluff-templater-dbt"
+name = "sqlfluff-templater-dataform"
 version = "3.1.1"
-description = "Lint your dbt project SQL"
+description = "Lint your dataform project SQL"
 readme = {file = "README.md", content-type = "text/markdown"}
 authors = [
   {name = "Alan Cruickshank", email = "alan@designingoverload.com"},
@@ -67,7 +67,7 @@ Twitter = "https://twitter.com/SQLFluff"
 Chat = "https://github.com/sqlfluff/sqlfluff#sqlfluff-on-slack"
 
 [project.entry-points.sqlfluff]
-sqlfluff_templater_dbt = "sqlfluff_templater_dbt"
+sqlfluff_templater_dataform = "sqlfluff_templater_dataform"
 
 [tool.setuptools.packages.find]
-include = ["sqlfluff_templater_dbt", "sqlfluff_templater_dbt.osmosis"]
+include = ["sqlfluff_templater_dataform", "sqlfluff_templater_dataform.osmosis"]

@@ -3,11 +3,11 @@ services:
     platform: linux/amd64
     build:
       context: ../../..
-      dockerfile: plugins/sqlfluff-templater-dbt/docker/Dockerfile.dev
+      dockerfile: plugins/sqlfluff-templater-dataform/docker/Dockerfile.dev
     volumes:
       # Host source code directory
       - ../../../:/app/
-      - ../test/fixtures/dbt/profiles_yml:/root/.dbt
+      - ../test/fixtures/dataform/profiles_yml:/root/.dataform
     depends_on:
       - postgres
     entrypoint: /bin/bash

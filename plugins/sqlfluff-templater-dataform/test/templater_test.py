@@ -17,7 +17,7 @@ from sqlfluff.core import FluffConfig, Lexer, Linter
 from sqlfluff.core.errors import SQLFluffSkipFile, SQLFluffUserError, SQLTemplaterError
 from sqlfluff.utils.testing.cli import invoke_assert_code
 from sqlfluff.utils.testing.logging import fluff_log_catcher
-from sqlfluff_templater_dbt.templater import DbtTemplater
+from sqlfluff_templater_dataform.templater import DataformTemplater
 
 
 def test__templater_dbt_missing(dbt_templater, project_dir, dbt_fluff_config):
