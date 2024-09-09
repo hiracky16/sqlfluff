@@ -86,14 +86,11 @@ class DataformTemplater(RawTemplater):
     ):
         if fname.endswith(".sqlx"):
             print(f"Processing SQLX file: {fname}")
-        raw_slices, templated_slices = self.slice_sqlx_template(in_str)
-
-        cleaned_content = self._replace_blocks_with_newline(in_str)
-        cleaned_content = self.replace_ref_with_bq_table(cleaned_content)
+        templated_sql, raw_slices, templated_slices = self.slice_sqlx_template(in_str)
 
         return TemplatedFile(
             source_str=in_str,
-            templated_str=cleaned_content,
+            templated_str=templated_sql,
             fname=fname,
             sliced_file=templated_slices,
             raw_sliced=raw_slices,
@@ -108,7 +105,7 @@ class DataformTemplater(RawTemplater):
 
         return re.sub(pattern, '', in_str)
 
-    def replace_ref_with_bq_table(self, sql):
+    def _replace_ref_with_bq_table(self, sql):
         pattern = re.compile(r"\${ref\('([^']+)'(?:, '([^']+)')?\)}")
         def ref_to_table(match):
             if match.group(2):
@@ -122,7 +119,12 @@ class DataformTemplater(RawTemplater):
         return re.sub(pattern, ref_to_table, sql)
 
     # SQLX をスライスして、RawFileSlice と TemplatedFileSlice を同時に返す関数
-    def slice_sqlx_template(self, sql: str) -> (List[RawFileSlice], List[TemplatedFileSlice]):
+    def slice_sqlx_template(self, sql: str) -> (str, List[RawFileSlice], List[TemplatedFileSlice]):
+        # まず、config や js ブロックを改行に置換
+        replaced_sql = self._replace_blocks_with_newline(sql)
+        # ref 関数をBigQueryテーブル名に置換
+        replaced_sql = self._replace_ref_with_bq_table(replaced_sql)
+
         # SQLX の構造に対応する正規表現パターン
         patterns = [
             (r'config\s*\{[^}]*\}', 'templated'),   # config ブロック
@@ -186,7 +188,7 @@ class DataformTemplater(RawTemplater):
 
             # `ref` 関数の置換を適用する
             if next_match_type == 'templated' and r"${ref(" in next_match.group(0):
-                ref_replaced = self.replace_ref_with_bq_table(next_match.group(0))
+                ref_replaced = self._replace_ref_with_bq_table(next_match.group(0))
                 raw_slices.append(RawFileSlice(
                     raw=next_match.group(0), 
                     slice_type='templated', 
@@ -216,4 +218,5 @@ class DataformTemplater(RawTemplater):
             current_idx = current_idx + next_match.end()
             block_idx += 1
 
-        return raw_slices, templated_slices
+        # 置換済みのSQLと、スライス情報を返す
+        return replaced_sql, raw_slices, templated_slices
