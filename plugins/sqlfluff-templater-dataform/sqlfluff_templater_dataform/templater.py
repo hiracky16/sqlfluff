@@ -34,13 +34,14 @@ from jinja2 import Environment
 from jinja2_simple_tags import StandaloneTag
 
 from sqlfluff.core.errors import SQLFluffSkipFile, SQLFluffUserError, SQLTemplaterError
-from sqlfluff.core.templaters.base import RawTemplater, TemplatedFile, large_file_check
+from sqlfluff.core.templaters.base import RawTemplater, TemplatedFile, large_file_check, RawFileSlice, TemplatedFileSlice
 from sqlfluff.core.templaters.jinja import JinjaTemplater
 
 # if TYPE_CHECKING:  # pragma: no cover
 
 from sqlfluff.cli.formatters import OutputStreamFormatter
 from sqlfluff.core import FluffConfig
+
 
 # Instantiate the templater logger
 templater_logger = logging.getLogger("sqlfluff.templater")
@@ -85,15 +86,17 @@ class DataformTemplater(RawTemplater):
     ):
         if fname.endswith(".sqlx"):
             print(f"Processing SQLX file: {fname}")
-        print(in_str)
+        raw_slices, templated_slices = self.slice_sqlx_template(in_str)
 
         cleaned_content = self._replace_blocks_with_newline(in_str)
         cleaned_content = self.replace_ref_with_bq_table(cleaned_content)
-        print(cleaned_content)
 
         return TemplatedFile(
-            source_str=cleaned_content,
+            source_str=in_str,
+            templated_str=cleaned_content,
             fname=fname,
+            sliced_file=templated_slices,
+            raw_sliced=raw_slices,
         ), []
 
     def _replace_blocks_with_newline(self, in_str: str) -> str:
@@ -101,10 +104,9 @@ class DataformTemplater(RawTemplater):
         def replace(match):
             block_content = match.group(2)
             lines = block_content.count('\n')  # count new line
-            print(lines)
             return '\n' * lines
 
-        return re.sub(pattern, replace, in_str)
+        return re.sub(pattern, '', in_str)
 
     def replace_ref_with_bq_table(self, sql):
         pattern = re.compile(r"\${ref\('([^']+)'(?:, '([^']+)')?\)}")
@@ -118,3 +120,100 @@ class DataformTemplater(RawTemplater):
             return f"`{self.project_id}.{dataset}.{model_name}`"
 
         return re.sub(pattern, ref_to_table, sql)
+
+    # SQLX をスライスして、RawFileSlice と TemplatedFileSlice を同時に返す関数
+    def slice_sqlx_template(self, sql: str) -> (List[RawFileSlice], List[TemplatedFileSlice]):
+        # SQLX の構造に対応する正規表現パターン
+        patterns = [
+            (r'config\s*\{[^}]*\}', 'templated'),   # config ブロック
+            (r'js\s*\{[^}]*\}', 'templated'),       # js ブロック
+            (r'\${ref\([^\)]*\)}', 'templated')     # ref 関数
+        ]
+        
+        raw_slices = []  # RawFileSlice のリスト
+        templated_slices = []  # TemplatedFileSlice のリスト
+        current_idx = 0
+        templated_idx = 0  # テンプレート後のインデックス
+        block_idx = 0
+
+        # SQLX 全体をスキャンしてスライスを作成
+        while current_idx < len(sql):
+            next_match = None
+            next_match_type = None
+            
+            # 各パターンで最初にマッチする箇所を探す
+            for pattern, match_type in patterns:
+                match = re.search(pattern, sql[current_idx:])
+                if match:
+                    match_start = current_idx + match.start()
+                    if not next_match or match_start < next_match.start():
+                        next_match = match
+                        next_match_type = match_type
+
+            # マッチするものがない場合、残りはリテラルとして追加
+            if not next_match:
+                raw_slices.append(RawFileSlice(
+                    raw=sql[current_idx:], 
+                    slice_type='literal', 
+                    source_idx=current_idx, 
+                    block_idx=block_idx
+                ))
+                templated_slices.append(TemplatedFileSlice(
+                    slice_type='literal',
+                    source_slice=slice(current_idx, len(sql)),
+                    templated_slice=slice(templated_idx, templated_idx + len(sql) - current_idx)
+                ))
+                break
+
+            # リテラル部分を追加（マッチした部分の手前までの内容を追加）
+            if next_match.start() > 0:
+                raw_slices.append(RawFileSlice(
+                    raw=sql[current_idx:next_match.start() + current_idx], 
+                    slice_type='literal', 
+                    source_idx=current_idx, 
+                    block_idx=block_idx
+                ))
+                templated_slices.append(TemplatedFileSlice(
+                    slice_type='literal',
+                    source_slice=slice(current_idx, next_match.start() + current_idx),
+                    templated_slice=slice(templated_idx, templated_idx + next_match.start())
+                ))
+                templated_idx += next_match.start()
+                block_idx += 1
+
+            # テンプレート部分を追加
+            templated_len = len(next_match.group(0))  # テンプレートの長さ
+
+            # `ref` 関数の置換を適用する
+            if next_match_type == 'templated' and r"${ref(" in next_match.group(0):
+                ref_replaced = self.replace_ref_with_bq_table(next_match.group(0))
+                raw_slices.append(RawFileSlice(
+                    raw=next_match.group(0), 
+                    slice_type='templated', 
+                    source_idx=current_idx + next_match.start(), 
+                    block_idx=block_idx
+                ))
+                templated_slices.append(TemplatedFileSlice(
+                    slice_type=next_match_type,
+                    source_slice=slice(current_idx + next_match.start(), current_idx + next_match.end()),
+                    templated_slice=slice(templated_idx, templated_idx + len(ref_replaced))
+                ))
+                templated_idx += len(ref_replaced)
+            else:
+                raw_slices.append(RawFileSlice(
+                    raw=next_match.group(0), 
+                    slice_type=next_match_type, 
+                    source_idx=current_idx + next_match.start(), 
+                    block_idx=block_idx
+                ))
+                templated_slices.append(TemplatedFileSlice(
+                    slice_type=next_match_type,
+                    source_slice=slice(current_idx + next_match.start(), current_idx + next_match.end()),
+                    templated_slice=slice(templated_idx, templated_idx)
+                ))
+
+            # インデックスを次のマッチの終わりに移動
+            current_idx = current_idx + next_match.end()
+            block_idx += 1
+
+        return raw_slices, templated_slices
